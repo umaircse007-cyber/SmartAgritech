@@ -1,0 +1,45 @@
+const GEMINI_API_KEY = "......";
+const BLYNK_AUTH_TOKEN = ".....";
+const BLYNK_SERVER = "blynk.cloud"; 
+
+function doGet(e) {
+  // 1. Getting Data from ESP32
+  var soil = e.parameter.soil;
+  var temp = e.parameter.temp;
+  var hum = e.parameter.hum;
+  var lang = e.parameter.lang; // 0=Eng, 1=Hindi
+
+  // 2. Preparing Gemini Prompt
+  var prompt = "";
+  if (lang == "1") {
+    prompt = `Mitti: ${soil}%, Temp: ${temp}C. Is this safe for crops? Answer in ONE short Hindi sentence (max 15 words). No markdown.`;
+  } else {
+    prompt = `Soil: ${soil}%, Temp: ${temp}C. Is this safe? Answer in ONE short English sentence (max 15 words). No markdown.`;
+  }
+
+  // 3. Calling Gemini API
+  var url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + ....;
+  var payload = {
+    "contents": [{ "parts": [{ "text": prompt }] }]
+  };
+  
+  var options = {
+    "method": "post",
+    "contentType": "application/json",
+    "payload": JSON.stringify(payload),
+    "muteHttpExceptions": true
+  };
+
+  var response = UrlFetchApp.fetch(url, options);
+  var json = JSON.parse(response.getContentText());
+  var aiText = json.candidates[0].content.parts[0].text;
+  
+  // Cleaning up text (remove newlines)
+  aiText = aiText.replace(/(\r\n|\n|\r)/gm, " ");
+
+  // 4. Sending Result Back to Blynk (Pin V6)
+  var blynkUrl = `https://${blynk.cloud}/external/api/update?token=${....}&v6=${encodeURIComponent(aiText)}`;
+  UrlFetchApp.fetch(blynkUrl);
+
+  return ContentService.createTextOutput("AI Processed: " + aiText);
+}
