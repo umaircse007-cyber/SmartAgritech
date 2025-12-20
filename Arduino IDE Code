@@ -1,0 +1,126 @@
+/*********** BLYNK CONFIG ***********/
+#define BLYNK_TEMPLATE_ID "TMPL3dIlyRvk0"
+#define BLYNK_TEMPLATE_NAME "Smart AgriTech"
+#define BLYNK_AUTH_TOKEN "...."
+
+#define BLYNK_PRINT Serial
+
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <BlynkSimpleEsp32.h>
+#include <DHT.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
+
+/*********** WIFI ***********/
+char ssid[] = "Unstop";
+char pass[] = "Unstoppable@2026#";
+
+/*********** SENSOR PINS ***********/
+#define SOIL_PIN 34
+#define RELAY_PIN 26
+#define DHTPIN 4
+#define DHTTYPE DHT11
+
+DHT dht(DHTPIN, DHTTYPE);
+BlynkTimer timer;
+
+/*********** WEATHER CONFIG ***********/
+String city = "Delhi";
+String country = "IN";
+String weatherAPI = ".....";
+
+/*********** AI CONFIG ***********/
+String googleScript = "https://....";
+
+/*********** GLOBAL ***********/
+int language = 0; // 0=English, 1=Hindi
+float wTemp = 0;
+String wCondition = "";
+
+/*********** BLYNK ***********/
+BLYNK_WRITE(V4) { language = param.asInt(); }
+BLYNK_WRITE(V3) { digitalWrite(RELAY_PIN, param.asInt()); }
+
+BLYNK_WRITE(V10) {
+  if (param.asInt() == 1) {
+    Blynk.virtualWrite(V6, "AI soch raha hai...");
+    callAI();
+    Blynk.virtualWrite(V10, 0);
+  }
+}
+
+/*********** WEATHER FUNCTION ***********/
+void getWeather() {
+  HTTPClient http;
+  String url = "http://api.openweathermap.org/data/2.5/weather?q=" +
+               city + "," + country +
+               "&appid=" + weatherAPI + "&units=metric";
+
+  http.begin(url);
+  int code = http.GET();
+
+  if (code == 200) {
+    String payload = http.getString();
+    DynamicJsonDocument doc(1024);
+    deserializeJson(doc, payload);
+
+    wTemp = doc["main"]["temp"];
+    wCondition = doc["weather"][0]["main"].as<String>();
+
+    Blynk.virtualWrite(V5, wTemp);
+    Blynk.virtualWrite(V7, wCondition);
+  }
+  http.end();
+}
+
+/*********** AI CALL ***********/
+void callAI() {
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+
+  int soil = map(analogRead(SOIL_PIN), 4095, 0, 0, 100);
+  float temp = dht.readTemperature();
+  float hum = dht.readHumidity();
+
+  String url = googleScript +
+               "?soil=" + String(soil) +
+               "&temp=" + String(temp) +
+               "&hum=" + String(hum) +
+               "&wtemp=" + String(wTemp) +
+               "&weather=" + wCondition +
+               "&lang=" + String(language);
+
+  if (http.begin(client, url)) {
+    http.GET();
+    http.end();
+  }
+}
+
+/*********** SENSOR LOOP ***********/
+void sendSensors() {
+  int soil = map(analogRead(SOIL_PIN), 4095, 0, 0, 100);
+  float temp = dht.readTemperature();
+  float hum = dht.readHumidity();
+
+  Blynk.virtualWrite(V0, soil);
+  Blynk.virtualWrite(V1, temp);
+  Blynk.virtualWrite(V2, hum);
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(RELAY_PIN, OUTPUT);
+  dht.begin();
+
+  Blynk.begin(".....", "Unstop", "Unstoppable@2026#");
+
+  timer.setInterval(2000L, sendSensors);
+  timer.setInterval(10000L, getWeather);
+}
+
+void loop() {
+  Blynk.run();
+  timer.run();
+}
